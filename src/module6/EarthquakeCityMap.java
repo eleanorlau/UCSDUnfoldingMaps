@@ -1,8 +1,5 @@
 package module6;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import de.fhpotsdam.unfolding.UnfoldingMap;
 import de.fhpotsdam.unfolding.data.Feature;
 import de.fhpotsdam.unfolding.data.GeoJSONReader;
@@ -11,11 +8,16 @@ import de.fhpotsdam.unfolding.geo.Location;
 import de.fhpotsdam.unfolding.marker.AbstractShapeMarker;
 import de.fhpotsdam.unfolding.marker.Marker;
 import de.fhpotsdam.unfolding.marker.MultiMarker;
-import de.fhpotsdam.unfolding.providers.Google;
 import de.fhpotsdam.unfolding.providers.MBTilesMapProvider;
+import de.fhpotsdam.unfolding.providers.Microsoft;
 import de.fhpotsdam.unfolding.utils.MapUtils;
 import parsing.ParseFeed;
 import processing.core.PApplet;
+import processing.core.PGraphics;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /** EarthquakeCityMap
  * An application with an interactive map displaying earthquake data.
@@ -24,34 +26,39 @@ import processing.core.PApplet;
  * Date: July 17, 2015
  * */
 public class EarthquakeCityMap extends PApplet {
-	
+
 	// We will use member variables, instead of local variables, to store the data
 	// that the setUp and draw methods will need to access (as well as other methods)
 	// You will use many of these variables, but the only one you should need to add
 	// code to modify is countryQuakes, where you will store the number of earthquakes
 	// per country.
-	
+
 	// You can ignore this.  It's to get rid of eclipse warnings
 	private static final long serialVersionUID = 1L;
 
 	// IF YOU ARE WORKING OFFILINE, change the value of this variable to true
 	private static final boolean offline = false;
-	
-	/** This is where to find the local tiles, for working without an Internet connection */
+
+	/**
+	 * This is where to find the local tiles, for working without an Internet connection
+	 */
 	public static String mbTilesString = "blankLight-1-3.mbtiles";
-	
-	
+
 
 	//feed with magnitude 2.5+ Earthquakes
-	private String earthquakesURL = "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.atom";
-	
-	// The files containing city names and info and country names and info
+	private String earthquakesURL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.atom";
+
+	// The files containing city names and info and country names and info and airport names and info
 	private String cityFile = "city-data.json";
 	private String countryFile = "countries.geo.json";
-	
+	private String airportFile = "airports.dat";
+
 	// The map
 	private UnfoldingMap map;
-	
+
+	// Earthquake info
+	List<PointFeature> earthquakes;
+
 	// Markers for each city
 	private List<Marker> cityMarkers;
 	// Markers for each earthquake
@@ -59,84 +66,115 @@ public class EarthquakeCityMap extends PApplet {
 
 	// A List of country markers
 	private List<Marker> countryMarkers;
-	
+
+	// A List of airport markers
+	private List<Marker> airportMarkers;
+
 	// NEW IN MODULE 5
 	private CommonMarker lastSelected;
 	private CommonMarker lastClicked;
-	
-	public void setup() {		
+
+	public void setup() {
 		// (1) Initializing canvas and map tiles
 		size(900, 700, OPENGL);
 		if (offline) {
-		    map = new UnfoldingMap(this, 200, 50, 650, 600, new MBTilesMapProvider(mbTilesString));
-		    earthquakesURL = "2.5_week.atom";  // The same feed, but saved August 7, 2015
-		}
-		else {
-			map = new UnfoldingMap(this, 200, 50, 650, 600, new Google.GoogleMapProvider());
+			map = new UnfoldingMap(this, 200, 50, 650, 600, new MBTilesMapProvider(mbTilesString));
+			earthquakesURL = "2.5_week.atom";  // The same feed, but saved August 7, 2015
+		} else {
+			map = new UnfoldingMap(this, 200, 50, 650, 600, new Microsoft.RoadProvider());
 			// IF YOU WANT TO TEST WITH A LOCAL FILE, uncomment the next line
-		    //earthquakesURL = "2.5_week.atom";
+			//earthquakesURL = "2.5_week.atom";
 		}
 		MapUtils.createDefaultEventDispatcher(this, map);
-		
+
 		// FOR TESTING: Set earthquakesURL to be one of the testing files by uncommenting
 		// one of the lines below.  This will work whether you are online or offline
 		//earthquakesURL = "test1.atom";
 		//earthquakesURL = "test2.atom";
-		
+
 		// Uncomment this line to take the quiz
-		//earthquakesURL = "quiz2.atom";
-		
-		
+earthquakesURL = "quiz2.atom";
+
+
 		// (2) Reading in earthquake data and geometric properties
-	    //     STEP 1: load country features and markers
+		//     STEP 1: load country features and markers
 		List<Feature> countries = GeoJSONReader.loadData(this, countryFile);
 		countryMarkers = MapUtils.createSimpleMarkers(countries);
-		
+
 		//     STEP 2: read in city data
 		List<Feature> cities = GeoJSONReader.loadData(this, cityFile);
 		cityMarkers = new ArrayList<Marker>();
-		for(Feature city : cities) {
-		  cityMarkers.add(new CityMarker(city));
+		for (Feature city : cities) {
+			cityMarkers.add(new CityMarker(city));
 		}
-	    
-		//     STEP 3: read in earthquake RSS feed
-	    List<PointFeature> earthquakes = ParseFeed.parseEarthquake(this, earthquakesURL);
-	    quakeMarkers = new ArrayList<Marker>();
-	    
-	    for(PointFeature feature : earthquakes) {
-		  //check if LandQuake
-		  if(isLand(feature)) {
-		    quakeMarkers.add(new LandQuakeMarker(feature));
-		  }
-		  // OceanQuakes
-		  else {
-		    quakeMarkers.add(new OceanQuakeMarker(feature));
-		  }
-	    }
 
-	    // could be used for debugging
-	    printQuakes();
-	 		
-	    // (3) Add markers to map
-	    //     NOTE: Country markers are not added to the map.  They are used
-	    //           for their geometric properties
-	    map.addMarkers(quakeMarkers);
-	    map.addMarkers(cityMarkers);
-	    
-	    
+		//     STEP 3: read in earthquake RSS feed
+		earthquakes = ParseFeed.parseEarthquake(this, earthquakesURL);
+		quakeMarkers = new ArrayList<Marker>();
+
+		for (PointFeature feature : earthquakes) {
+			//check if LandQuake
+			if (isLand(feature)) {
+				quakeMarkers.add(new LandQuakeMarker(feature));
+			}
+			// OceanQuakes
+			else {
+				quakeMarkers.add(new OceanQuakeMarker(feature));
+			}
+		}
+
+		// could be used for debugging
+		printQuakes();
+
+		// read in Airport data
+		List<PointFeature> airports = ParseFeed.parseAirports(this,airportFile);
+		airportMarkers = new ArrayList<Marker>();
+		for (PointFeature airport : airports) {
+			airportMarkers.add(new AirportMarker(airport));
+		}
+
+		// (3) Add markers to map
+		//     NOTE: Country markers are not added to the map.  They are used
+		//           for their geometric properties
+		map.addMarkers(quakeMarkers);
+		map.addMarkers(cityMarkers);
+		map.addMarkers(airportMarkers);
+		for (Marker airport : airportMarkers) {
+			airport.setHidden(true);
+		}
+		sortAndPrint(100);
+
 	}  // End setup
-	
-	
+
+
 	public void draw() {
 		background(0);
 		map.draw();
 		addKey();
-		
+
 	}
-	
-	
+
+
 	// TODO: Add the method:
-	//   private void sortAndPrint(int numToPrint)
+	private void sortAndPrint(int numToPrint) {
+		List<EarthquakeMarker> quakeList = new ArrayList<EarthquakeMarker>();
+		for (PointFeature feature : earthquakes) {
+			quakeList.add(new EarthquakeMarker(feature) {
+				@Override
+				public void drawEarthquake(PGraphics pg, float x, float y) {
+					//null
+				}
+			});
+		}
+		Collections.sort(quakeList);
+		if (numToPrint > quakeList.size()) {
+			numToPrint = quakeList.size();
+		}
+		for(int i = 0; i < numToPrint; i++) {
+			System.out.println(quakeList.get(i).getTitle());
+		}
+	}
+
 	// and then call that method from setUp
 	
 	/** Event handler that gets called automatically when the 
@@ -185,6 +223,9 @@ public class EarthquakeCityMap extends PApplet {
 	{
 		if (lastClicked != null) {
 			unhideMarkers();
+			for (Marker airport: airportMarkers) {
+				airport.setHidden(true);
+			}
 			lastClicked = null;
 		}
 		else if (lastClicked == null) 
@@ -218,6 +259,17 @@ public class EarthquakeCityMap extends PApplet {
 						quakeMarker.setHidden(true);
 					}
 				}
+
+				AirportMarker closest = (AirportMarker) airportMarkers.get(0);
+				closest.setDistance(closest.getDistanceTo(marker.getLocation()));
+				for (Marker airport : airportMarkers) {
+					((AirportMarker) airport).setDistance(airport.getDistanceTo(marker.getLocation()));
+					if (((AirportMarker) airport).getDistance() < closest.getDistance()) {
+						closest = (AirportMarker) airport;
+					}
+				}
+				closest.setHidden(false);
+				lastSelected = closest;
 				return;
 			}
 		}		
@@ -245,6 +297,16 @@ public class EarthquakeCityMap extends PApplet {
 						mhide.setHidden(true);
 					}
 				}
+				AirportMarker closest = (AirportMarker) airportMarkers.get(0);
+				closest.setDistance(closest.getDistanceTo(marker.getLocation()));
+				for (Marker airport : airportMarkers) {
+					((AirportMarker) airport).setDistance(airport.getDistanceTo(marker.getLocation()));
+					if (((AirportMarker) airport).getDistance() < closest.getDistance()) {
+						closest = (AirportMarker) airport;
+					}
+				}
+				closest.setHidden(false);
+				lastSelected = closest;
 				return;
 			}
 		}
@@ -259,6 +321,7 @@ public class EarthquakeCityMap extends PApplet {
 		for(Marker marker : cityMarkers) {
 			marker.setHidden(false);
 		}
+
 	}
 	
 	// helper method to draw key in GUI
@@ -304,6 +367,8 @@ public class EarthquakeCityMap extends PApplet {
 		ellipse(xbase+35, ybase+160, 12, 12);
 		fill(color(255, 0, 0));
 		ellipse(xbase+35, ybase+180, 12, 12);
+		fill(color(0, 255, 0));
+		ellipse(xbase+35, ybase+230, 12, 12);
 		
 		textAlign(LEFT, CENTER);
 		fill(0, 0, 0);
@@ -312,6 +377,7 @@ public class EarthquakeCityMap extends PApplet {
 		text("Deep", xbase+50, ybase+180);
 
 		text("Past hour", xbase+50, ybase+200);
+		text("Closest airport", xbase+50, ybase+230);
 		
 		fill(255, 255, 255);
 		int centerx = xbase+35;
